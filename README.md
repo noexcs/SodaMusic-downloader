@@ -1,14 +1,16 @@
 # SodaMusic downloader
 
-一个用 Go 语言开发的高品质音乐下载工具，支持从 Soda Music 平台下载音频文件，并自动嵌入元数据和封面图片。
+一个用 Go 语言开发的汽水音乐下载工具，并自动嵌入元数据和封面图片。
 
 ## 功能
 
-- 🎵 **音频下载**
+- 🎵 **音频下载** - 免费音乐完整下载，会员音乐只可下载前30秒
 - 🎨 **元数据嵌入** - 自动嵌入歌曲信息、专辑封面等元数据
 - 📋 **剪贴板支持** - 可从剪贴板自动读取 URL
 
-## 💡 使用方法
+## 💡使用方法
+
+从 [Release 页面](https://github.com/noexcs/SodaMusic-downloader/releases/latest) 下载最新版本的 `sodamusic-downloader.exe`。
 
 ### 基本用法
 
