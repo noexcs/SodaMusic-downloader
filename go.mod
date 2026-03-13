@@ -1,0 +1,10 @@
+module sodamusic-downloader
+
+go 1.25.0
+
+require (
+	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
+	golang.org/x/net v0.52.0
+)
+
+require github.com/atotto/clipboard v0.1.4 // indirect
