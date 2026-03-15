@@ -191,7 +191,7 @@ func extractMetadata(bodyStr string) (
 	return
 }
 
-func embedMetadata(fileName, trackName, artistName, albumName, coverURL, genreTag string, composers, lyricists []string, releaseDate int64, hasCopyright bool, stats map[string]interface{}, bitRates []interface{}) {
+func embedMetadata(fileName, trackName, artistName, albumName, coverURL, genreTag string, composers, lyricists []string, releaseDate int64, hasCopyright bool, stats map[string]interface{}, bitRates []interface{}, lyrics map[string]interface{}) {
 	fmt.Println("\nEmbedding metadata and cover art...")
 
 	// Download cover image if URL is provided
@@ -222,13 +222,13 @@ func embedMetadata(fileName, trackName, artistName, albumName, coverURL, genreTa
 
 	// Try to use ffmpeg first (existing functionality)
 	// Note: We'll skip Go tag library if ffmpeg succeeds to avoid file handle conflicts
-	ffmpegErr := embedWithFFmpeg(fileName, trackName, artistName, albumName, coverFilePath, genreTag, composers, lyricists, releaseDate, hasCopyright)
+	ffmpegErr := embedWithFFmpeg(fileName, trackName, artistName, albumName, coverFilePath, genreTag, composers, lyricists, releaseDate, hasCopyright, lyrics)
 	if ffmpegErr != nil {
 		fmt.Printf("FFmpeg not available or failed: %v\n", ffmpegErr)
 		fmt.Println("Falling back to Go tag library...")
 
 		// Only use Go tag library as fallback if ffmpeg failed
-		err = embedWithGoTag(fileName, trackName, artistName, albumName, imgData, genreTag, composers, lyricists, releaseDate, hasCopyright, stats, bitRates)
+		err = embedWithGoTag(fileName, trackName, artistName, albumName, imgData, genreTag, composers, lyricists, releaseDate, hasCopyright, stats, bitRates, lyrics)
 		if err != nil {
 			fmt.Printf("Error embedding metadata with Go tag library: %v\n", err)
 		} else {
@@ -245,7 +245,7 @@ func embedMetadata(fileName, trackName, artistName, albumName, coverURL, genreTa
 	}
 }
 
-func embedWithGoTag(fileName, trackName, artistName, albumName string, coverImage []byte, genreTag string, composers, lyricists []string, releaseDate int64, hasCopyright bool, stats map[string]interface{}, bitRates []interface{}) error {
+func embedWithGoTag(fileName, trackName, artistName, albumName string, coverImage []byte, genreTag string, composers, lyricists []string, releaseDate int64, hasCopyright bool, stats map[string]interface{}, bitRates []interface{}, lyrics map[string]interface{}) error {
 	// Open the file for reading
 	f, err := os.Open(fileName)
 	if err != nil {
@@ -306,7 +306,7 @@ func embedWithGoTag(fileName, trackName, artistName, albumName string, coverImag
 	// So we'll use ffmpeg if available, or save metadata separately
 
 	// Try to use exiftool if available for comprehensive metadata
-	err = embedWithExifTool(fileName, metadata, coverImage, stats, bitRates)
+	err = embedWithExifTool(fileName, metadata, coverImage, stats, bitRates, lyrics)
 	if err == nil {
 		return nil
 	}
@@ -327,7 +327,7 @@ func embedWithGoTag(fileName, trackName, artistName, albumName string, coverImag
 	return nil
 }
 
-func embedWithExifTool(fileName string, metadata map[string]interface{}, coverImage []byte, stats map[string]interface{}, bitRates []interface{}) error {
+func embedWithExifTool(fileName string, metadata map[string]interface{}, coverImage []byte, stats map[string]interface{}, bitRates []interface{}, lyrics map[string]interface{}) error {
 	// Check if exiftool is available
 	_, err := exec.LookPath("exiftool")
 	if err != nil {
@@ -392,6 +392,18 @@ func embedWithExifTool(fileName string, metadata map[string]interface{}, coverIm
 		}
 	}
 
+	// Add lyrics if available
+	if lyrics != nil {
+		if lrcText, err := generateLRC(lyrics); err == nil && lrcText != "" {
+			tempLyricsFile := strings.TrimSuffix(fileName, ".m4a") + "_temp_lyrics.lrc"
+			err := os.WriteFile(tempLyricsFile, []byte(lrcText), 0644)
+			if err == nil {
+				defer os.Remove(tempLyricsFile)
+				args = append(args, fmt.Sprintf("-Lyrics<%s", tempLyricsFile))
+			}
+		}
+	}
+
 	args = append(args, fileName)
 
 	cmd := exec.Command("exiftool", args...)
@@ -404,7 +416,7 @@ func embedWithExifTool(fileName string, metadata map[string]interface{}, coverIm
 	return nil
 }
 
-func embedWithFFmpeg(audioFile, trackName, artistName, albumName, coverFile string, genreTag string, composers, lyricists []string, releaseDate int64, hasCopyright bool) error {
+func embedWithFFmpeg(audioFile, trackName, artistName, albumName, coverFile string, genreTag string, composers, lyricists []string, releaseDate int64, hasCopyright bool, lyrics map[string]interface{}) error {
 	// Check if ffmpeg is available
 	_, err := exec.LookPath("ffmpeg")
 	if err != nil {
@@ -456,6 +468,13 @@ func embedWithFFmpeg(audioFile, trackName, artistName, albumName, coverFile stri
 		cmdArgs = append(cmdArgs, "-metadata", "copyright=℗ & © All Rights Reserved")
 	}
 
+	// Add lyrics if available
+	if lyrics != nil {
+		if lrcText, err := generateLRC(lyrics); err == nil && lrcText != "" {
+			cmdArgs = append(cmdArgs, "-metadata", fmt.Sprintf("lyrics=%s", lrcText))
+		}
+	}
+
 	cmdArgs = append(cmdArgs, outputFile)
 
 	cmd := exec.Command("ffmpeg", cmdArgs...)
@@ -474,4 +493,34 @@ func embedWithFFmpeg(audioFile, trackName, artistName, albumName, coverFile stri
 	}
 
 	return nil
+}
+
+func generateLRC(lyrics map[string]interface{}) (string, error) {
+	if sentences, ok := lyrics["sentences"].([]interface{}); ok && len(sentences) > 0 {
+		var lrcContent strings.Builder
+		for _, sentence := range sentences {
+			if sentMap, ok := sentence.(map[string]interface{}); ok {
+				startTimeMs := 0.0
+				text := ""
+
+				if startMs, ok := sentMap["startMs"].(float64); ok {
+					startTimeMs = startMs
+				}
+				if t, ok := sentMap["text"].(string); ok {
+					text = t
+				}
+
+				totalSeconds := startTimeMs / 1000.0
+				minutes := int(totalSeconds / 60)
+				seconds := totalSeconds - float64(minutes*60)
+				timeStamp := fmt.Sprintf("[%02d:%05.2f]", minutes, seconds)
+
+				lrcContent.WriteString(timeStamp)
+				lrcContent.WriteString(text)
+				lrcContent.WriteString("\n")
+			}
+		}
+		return lrcContent.String(), nil
+	}
+	return "", fmt.Errorf("no lyrics sentences found")
 }

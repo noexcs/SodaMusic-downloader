@@ -250,7 +250,7 @@ func main() {
 	}
 
 	// Embed cover art and metadata if available
-	if coverURL != "" || trackName != "" || artistName != "" || albumName != "" || genreTag != "" || len(composers) > 0 || len(lyricists) > 0 || releaseDate > 0 || hasCopyright {
-		embedMetadata(fileName, trackName, artistName, albumName, coverURL, genreTag, composers, lyricists, releaseDate, hasCopyright, stats, bitRates)
+	if coverURL != "" || trackName != "" || artistName != "" || albumName != "" || genreTag != "" || len(composers) > 0 || len(lyricists) > 0 || releaseDate > 0 || hasCopyright || lyrics != nil {
+		embedMetadata(fileName, trackName, artistName, albumName, coverURL, genreTag, composers, lyricists, releaseDate, hasCopyright, stats, bitRates, lyrics)
 	}
 }
